@@ -47,6 +47,7 @@ azure-keyvault-secrets = {version = "^4.8.0", optional = true}
 google-cloud-kms = {version = "^2.21.3", optional = true}
 resend = {version = "^0.8.0", optional = true}
 pynacl = {version = "^1.5.0", optional = true}
+whylogs-container-client = {version = "^2.2.1", optional = true}
 
 [tool.poetry.extras]
 proxy = [
@@ -71,6 +72,10 @@ extra_proxy = [
     "azure-keyvault-secrets",
     "google-cloud-kms",
     "resend",
+]
+
+whylabs = [
+    "whylogs-container-client",
 ]
 
 [tool.isort]

@@ -29,6 +29,7 @@ from litellm.cost_calculator import _select_model_name_for_cost_calc
 from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.integrations.mlflow import MlflowLogger
+from litellm.integrations.whylabs import WhyLabsLogger
 from litellm.litellm_core_utils.redact_messages import (
     redact_message_input_output_from_custom_logger,
     redact_message_input_output_from_logging,
@@ -2320,6 +2321,15 @@ def _init_custom_logger_compatible_class(  # noqa: PLR0915
         _in_memory_loggers.append(_mlflow_logger)
         return _mlflow_logger  # type: ignore
 
+    elif logging_integration == "whylabs":
+        for callback in _in_memory_loggers:
+            if isinstance(callback, WhyLabsLogger):
+                return callback  # type: ignore
+
+        _whylabs_logger = WhyLabsLogger()
+        _in_memory_loggers.append(_whylabs_logger)
+        return _whylabs_logger
+
 
 def get_custom_logger_compatible_class(
     logging_integration: litellm._custom_logger_compatible_callbacks_literal,
@@ -2425,6 +2435,11 @@ def get_custom_logger_compatible_class(
     elif logging_integration == "mlflow":
         for callback in _in_memory_loggers:
             if isinstance(callback, MlflowLogger):
+                return callback
+
+    elif logging_integration == "whylabs":
+        for callback in _in_memory_loggers:
+            if isinstance(callback, WhyLabsLogger):
                 return callback
 
     return None
