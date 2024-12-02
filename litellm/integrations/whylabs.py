@@ -1,3 +1,4 @@
+import backoff
 import json
 import os
 import requests
@@ -16,6 +17,10 @@ except:
 
 def _ic(fn):
     ic(fn)
+
+
+MAX_REQUEST_TIME = 60  # seconds
+MAX_REQUEST_TRIES = 10
 
 
 def get_output_str_from_response(response_obj, kwargs):
@@ -39,10 +44,18 @@ class WhyLabsLogger(CustomLogger):
         self._dataset_id = os.environ.get("WHYLABS_DEFAULT_DATASET_ID")
         self._org_id = os.environ.get("WHYLABS_DEFAULT_ORG_ID")
 
-    def _do_request(self, data: Dict[str, str]) -> None:
+    @backoff.on_predicate(
+        backoff.expo,
+        lambda x: x.status_code != 200,
+        max_time=MAX_REQUEST_TIME,
+        max_tries=MAX_REQUEST_TRIES,
+        jitter=backoff.full_jitter,
+    )
+    def _do_request(self, data: Dict[str, str]) -> requests.Response:
         headers = {"X-API-Key": self._api_key}
         r = requests.post(f"{self._endpoint}/log/llm", json=data, headers=headers)
         ic(r)
+        return r
 
     def _log_event(self, kwargs, response_obj, start_time, end_time):
         #ic(kwargs)
