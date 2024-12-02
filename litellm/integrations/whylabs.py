@@ -1,20 +1,17 @@
+import json
 import os
+import requests
+from typing import Dict
 
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.utils import get_formatted_prompt, get_response_string
 
-from whylogs_container_client import AuthenticatedClient
-import whylogs_container_client.api.llm.log_llm as LogLlm
-import whylogs_container_client.api.llm.evaluate as Evaluate
-from whylogs_container_client import Client
-
-from whylogs_container_client.models.evaluation_result import EvaluationResult
-from whylogs_container_client.models import LogRequest
-from whylogs_container_client.models.llm_validate_request import LLMValidateRequest
-from whylogs_container_client.models.validation_result import ValidationResult
-
-from icecream import ic
+try:
+    from icecream import ic
+except:
+    def ic(x):
+        print(x)
 
 
 def _ic(fn):
@@ -37,16 +34,15 @@ def get_output_str_from_response(response_obj, kwargs):
 
 class WhyLabsLogger(CustomLogger):
     def __init__(self):
-        whylogs_endpoint = os.environ.get("WHYLOGS_API_ENDPOINT")
-        whylogs_api_key = os.environ.get("WHYLOGS_API_KEY")
-        self._client = AuthenticatedClient(
-            base_url=whylogs_endpoint,
-            token=whylogs_api_key,
-            prefix="",
-            auth_header_name="X-API-Key"
-        )
+        self._endpoint = os.environ.get("WHYLOGS_API_ENDPOINT")
+        self._api_key = os.environ.get("WHYLOGS_API_KEY")
         self._dataset_id = os.environ.get("WHYLABS_DEFAULT_DATASET_ID")
         self._org_id = os.environ.get("WHYLABS_DEFAULT_ORG_ID")
+
+    def _do_request(self, data: Dict[str, str]) -> None:
+        headers = {"X-API-Key": self._api_key}
+        r = requests.post(f"{self._endpoint}/log/llm", json=data, headers=headers)
+        ic(r)
 
     def _log_event(self, kwargs, response_obj, start_time, end_time):
         #ic(kwargs)
@@ -57,13 +53,14 @@ class WhyLabsLogger(CustomLogger):
         response = get_response_string(response_obj)
         ic(response)
 
-        request = LLMValidateRequest(
-            prompt=prompt,
-            response=response,
-            dataset_id=self._dataset_id,
-            id=self._dataset_id,
-        )
-        ic(LogLlm.sync_detailed(client=self._client, body=request))
+        data = {
+            "prompt": prompt,
+            "response": response,
+            "id": self._dataset_id,
+            "datasetId": self._dataset_id,
+            "timestamp": 0,
+        }
+        self._do_request(data)
 
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
         _ic("log_stream_event")
