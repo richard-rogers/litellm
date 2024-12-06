@@ -68,6 +68,10 @@ RUN pip install *.whl /wheels/* --no-index --find-links=/wheels/ && rm -f *.whl 
 RUN prisma generate
 RUN chmod +x docker/entrypoint.sh
 
+
+RUN pip install icecream
+
+
 EXPOSE 4000/tcp
 
 ENTRYPOINT ["litellm"]
