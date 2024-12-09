@@ -34,10 +34,6 @@ except:
     ic = ic_()
 
 
-def _ic(fn):
-    ic(fn)
-
-
 MAX_REQUEST_TIME = 60  # seconds
 MAX_REQUEST_TRIES = 10
 
@@ -73,8 +69,7 @@ class WhyLabsBase:
     )
     def _do_request(self, data: Dict[str, str]) -> requests.Response:
         headers = {"X-API-Key": self._api_key}
-        r = ic(requests.post(f"{self._endpoint}/{self._route}", json=data, headers=headers))
-        return r
+        return requests.post(f"{self._endpoint}/{self._route}", json=data, headers=headers)
 
         
 class WhyLabsLogger(CustomLogger, WhyLabsBase):
@@ -84,15 +79,10 @@ class WhyLabsLogger(CustomLogger, WhyLabsBase):
         self._route = "log/llm"
 
     def _log_event(self, kwargs, response_obj, start_time, end_time):
-        #ic(kwargs)
         call_type = kwargs.get("call_type", "litellm")
-        ic(call_type)
         call_type = "completion" if call_type == "acompletion" else call_type  # Hmmm... LiteLLM bug?
-        ic(call_type)
         prompt = get_formatted_prompt(data=kwargs, call_type=call_type)
-        ic(prompt)
         response = get_response_string(response_obj)
-        ic(response)
 
         data = {
             "prompt": prompt,
@@ -102,29 +92,23 @@ class WhyLabsLogger(CustomLogger, WhyLabsBase):
         self._do_request(data)
 
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("log_stream_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
     def log_success_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("log_success_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
     def log_failure_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("log_failure_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
     #### ASYNC ####
 
     async def async_log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("async_log_stream_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("async_log_success_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
-        _ic("async_log_failure_event")
         self._log_event(kwargs, response_obj, start_time, end_time)
 
 
@@ -160,20 +144,15 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
             "rerank",
         ],
     ) -> Optional[Union[Exception, str, dict]]:
-        verbose_proxy_logger.debug("****************************  begin async_pre_call_hook *******************************")
-        #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
-        #verbose_proxy_logger.debug(ic.format(data))
-        verbose_proxy_logger.debug(ic.format(call_type))
         call_type = "completion" if call_type == "acompletion" else call_type  # Hmmm... LiteLLM bug?
         prompt = get_formatted_prompt(data=data, call_type=call_type)
-        verbose_proxy_logger.debug(ic.format(prompt))
         request = {
             "prompt": prompt,
             "datasetId": self._dataset_id,
         }
         response = ic(self._do_request(request).json())
         action, action_message = response["action"]["action_type"], response["action"]["message"]
-        verbose_proxy_logger.debug(ic.format(response))
+
         # If the response included a modified prompt, we would replace the message in data
         # and pass it on to the next guardrail or LLM: message["content"] = <modified prompt>
 
@@ -187,8 +166,6 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
         else:
             verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
 
-        verbose_proxy_logger.debug("****************************  end async_pre_call_hook *******************************")
-        #verbose_proxy_logger.debug(ic.format(data))
         return data
 
     async def async_moderation_hook(
@@ -203,20 +180,15 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
             "audio_transcription",
         ],
     ) -> Any:
-        verbose_proxy_logger.debug("****************************  begin async_moderation_hook *******************************")
-        #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
-        #verbose_proxy_logger.debug(ic.format(data))
         call_type = "completion" if call_type == "acompletion" else call_type  # Hmmm... LiteLLM bug?
-        verbose_proxy_logger.debug(ic.format(call_type))
         prompt = get_formatted_prompt(data=data, call_type=call_type)
-        verbose_proxy_logger.debug(ic.format(prompt))
         request = {
             "prompt": prompt,
             "datasetId": self._dataset_id,
         }
         response = ic(self._do_request(request).json())
         action, action_message = response["action"]["action_type"], response["action"]["message"]
-        verbose_proxy_logger.debug(ic.format(response))
+
         # The prompt has already been sent to the LLM, so we can't modify it. We can only block it.
 
         if action == "block":
@@ -229,23 +201,15 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
         else:
             verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
 
-        #verbose_proxy_logger.debug(ic.format(data))
-        verbose_proxy_logger.debug("****************************  end async_moderation_hook *******************************")
-
     async def async_post_call_success_hook(
         self,
         data: dict,
         user_api_key_dict: UserAPIKeyAuth,
         response: Union[Any, ModelResponse, EmbeddingResponse, ImageResponse],
     ) -> Any:
-        verbose_proxy_logger.debug("****************************  begin async_post_call_hook *******************************")
-        #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
         call_type = _guess_call_type(data)
-        verbose_proxy_logger.debug(ic.format(call_type))
         prompt = get_formatted_prompt(data=data, call_type=call_type)
-        verbose_proxy_logger.debug(ic.format(prompt))
         answer = get_response_string(response)
-        verbose_proxy_logger.debug(ic.format(answer))
         request = {
             "prompt": prompt,
             "response": answer,
@@ -253,7 +217,6 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
         }
         reply = ic(self._do_request(request).json())
         action, action_message = reply["action"]["action_type"], reply["action"]["message"]
-        verbose_proxy_logger.debug(ic.format(reply))
 
         if action == "block":
             verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
@@ -264,4 +227,3 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
             verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
         else:
             verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
-        verbose_proxy_logger.debug("****************************  end async_post_call_hook *******************************")
