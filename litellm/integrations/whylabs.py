@@ -58,7 +58,7 @@ def get_output_str_from_response(response_obj, kwargs):
 
 class WhyLabsBase:
     def __init__(self, **kwargs):
-        self._endpoint = os.environ.get("GUARDRAILS_API_ENDPOINT")
+        self._endpoint = os.environ.get("GUARDRAILS_ENDPOINT")
         self._api_key = os.environ.get("GUARDRAILS_API_KEY")
         self._dataset_id = os.environ.get("WHYLABS_DEFAULT_DATASET_ID")
         self._org_id = os.environ.get("WHYLABS_DEFAULT_ORG_ID")
