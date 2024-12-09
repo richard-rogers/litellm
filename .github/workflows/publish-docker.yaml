@@ -29,7 +29,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v3
         with:
-          context: docker
+          context: ./docker
           file: Dockerfile.non_root
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
