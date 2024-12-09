@@ -22,9 +22,16 @@ from litellm.types.guardrails import GuardrailEventHooks
 try:
     from icecream import ic
 except:
-    def ic(x):
-        print(x)
-        return x
+    class ic_:
+        def __call__(self, x):
+            print(x)
+            return x
+
+        @staticmethod
+        def format(x):
+            return x
+
+    ic = ic_()
 
 
 def _ic(fn):
@@ -121,6 +128,16 @@ class WhyLabsLogger(CustomLogger, WhyLabsBase):
         self._log_event(kwargs, response_obj, start_time, end_time)
 
 
+def _guess_call_type(data: dict) -> str:
+    if "messages" in data:
+        return "completion"
+    elif "prompt" in data:
+        return "text_completion"  # There are a couple others that use 'prompt', but this works
+    elif "input" in data:
+        return "embedding"  # moderation also uses 'embedding', but this works
+    return ""
+
+        
 class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
     def __init__(self, **kwargs):
         CustomGuardrail.__init__(self, **kwargs)
@@ -146,41 +163,32 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
         verbose_proxy_logger.debug("****************************  begin async_pre_call_hook *******************************")
         #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
         #verbose_proxy_logger.debug(ic.format(data))
-        #verbose_proxy_logger.debug(ic.format(call_type))
+        verbose_proxy_logger.debug(ic.format(call_type))
+        call_type = "completion" if call_type == "acompletion" else call_type  # Hmmm... LiteLLM bug?
+        prompt = get_formatted_prompt(data=data, call_type=call_type)
+        verbose_proxy_logger.debug(ic.format(prompt))
+        request = {
+            "prompt": prompt,
+            "datasetId": self._dataset_id,
+        }
+        response = ic(self._do_request(request).json())
+        action, action_message = response["action"]["action_type"], response["action"]["message"]
+        verbose_proxy_logger.debug(ic.format(response))
+        # If the response included a modified prompt, we would replace the message in data
+        # and pass it on to the next guardrail or LLM: message["content"] = <modified prompt>
 
-        blocked = False
-        block_messages: List[str] = []
-        _messages = data.get("messages")
-        if _messages:
-            for message in _messages:
-                _content = message.get("content")
-                if isinstance(_content, str):
-                    request = {
-                        "prompt": _content,
-                        "datasetId": self._dataset_id,
-                    }
-                    response = ic(self._do_request(request).json())
-                    action, action_message = response["action"]["action_type"], response["action"]["message"]
-                    ic(prompt)
-                    ic(response)
-                    # If the response included a modified prompt, we would replace the message in data
-                    # and pass it on to the next guardrail or LLM: message["content"] = <modified prompt>
+        if action == "block":
+            verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+            raise ValueError(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+        elif action == "flag":
+            verbose_proxy_logger.debug(f"Prompt flagged by WhyLabs guardrail: {action_message}")
+        elif action == "pass":
+            verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
+        else:
+            verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
 
-                    if action == "block":
-                        blocked = True
-                        block_messages.append(action_message)
-                        verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
-                    elif action == "flag":
-                        verbose_proxy_logger.debug(f"Prompt flagged by WhyLabs guardrail: {action_message}")
-                    elif action == "pass":
-                        verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
-                    else:
-                        verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
-
-        if blocked:
-            raise ValueError(f"Prompt(s) blocked by WhyLabs guardrail: {';'.join(block_messages)})")
         verbose_proxy_logger.debug("****************************  end async_pre_call_hook *******************************")
-        verbose_proxy_logger.debug(ic.format(data))
+        #verbose_proxy_logger.debug(ic.format(data))
         return data
 
     async def async_moderation_hook(
@@ -198,38 +206,30 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
         verbose_proxy_logger.debug("****************************  begin async_moderation_hook *******************************")
         #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
         #verbose_proxy_logger.debug(ic.format(data))
-        #verbose_proxy_logger.debug(ic.format(call_type))
+        call_type = "completion" if call_type == "acompletion" else call_type  # Hmmm... LiteLLM bug?
+        verbose_proxy_logger.debug(ic.format(call_type))
+        prompt = get_formatted_prompt(data=data, call_type=call_type)
+        verbose_proxy_logger.debug(ic.format(prompt))
+        request = {
+            "prompt": prompt,
+            "datasetId": self._dataset_id,
+        }
+        response = ic(self._do_request(request).json())
+        action, action_message = response["action"]["action_type"], response["action"]["message"]
+        verbose_proxy_logger.debug(ic.format(response))
+        # The prompt has already been sent to the LLM, so we can't modify it. We can only block it.
 
-        blocked = False
-        block_messages: List[str] = []
-        _messages = data.get("messages")
-        if _messages:
-            for message in _messages:  # should these be concatenated so we can hit whylogs just once?
-                _content = message.get("content")
-                if isinstance(_content, str):
-                    data = {
-                        "prompt": _content,
-                        #"id": self._dataset_id,
-                        "datasetId": self._dataset_id,
-                    }
-                    response = ic(self._do_request(data).json())
-                    action, action_message = response["action"]["action_type"], response["action"]["message"]
+        if action == "block":
+            verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+            raise ValueError(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+        elif action == "flag":
+            verbose_proxy_logger.debug(f"Prompt flagged by WhyLabs guardrail: {action_message}")
+        elif action == "pass":
+            verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
+        else:
+            verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
 
-                    # The prompt has already be sent on the LLM, so we can't modify it. We can only block it.
-
-                    if action == "block":
-                        blocked = True
-                        block_messages.append(action_message)
-                        verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
-                    elif action == "flag":
-                        verbose_proxy_logger.debug(f"Prompt flagged by WhyLabs guardrail: {action_message}")
-                    elif action == "pass":
-                        verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
-                    else:
-                        verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
-
-        if blocked:
-            raise ValueError(f"Prompt(s) blocked by WhyLabs guardrail: {';'.join(block_messages)})")
+        #verbose_proxy_logger.debug(ic.format(data))
         verbose_proxy_logger.debug("****************************  end async_moderation_hook *******************************")
 
     async def async_post_call_success_hook(
@@ -240,11 +240,28 @@ class WhyLabsGuardrail(CustomGuardrail, WhyLabsBase):
     ) -> Any:
         verbose_proxy_logger.debug("****************************  begin async_post_call_hook *******************************")
         #verbose_proxy_logger.debug(ic.format(user_api_key_dict))
-        verbose_proxy_logger.debug(ic.format(data))
-        verbose_proxy_logger.debug(ic.format(response))
-
-        verbose_proxy_logger.debug(ic.format(data.get("messages")))
+        call_type = _guess_call_type(data)
+        verbose_proxy_logger.debug(ic.format(call_type))
+        prompt = get_formatted_prompt(data=data, call_type=call_type)
+        verbose_proxy_logger.debug(ic.format(prompt))
         answer = get_response_string(response)
         verbose_proxy_logger.debug(ic.format(answer))
+        request = {
+            "prompt": prompt,
+            "response": answer,
+            "datasetId": self._dataset_id,
+        }
+        reply = ic(self._do_request(request).json())
+        action, action_message = reply["action"]["action_type"], reply["action"]["message"]
+        verbose_proxy_logger.debug(ic.format(reply))
 
+        if action == "block":
+            verbose_prox_logger.debug(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+            raise ValueError(f"Prompt blocked by WhyLabs guardrail: {action_message}")
+        elif action == "flag":
+            verbose_proxy_logger.debug(f"Prompt flagged by WhyLabs guardrail: {action_message}")
+        elif action == "pass":
+            verbose_proxy_logger.debug("Prompt passed by WhyLabs guardrail")
+        else:
+            verbose_proxy_logger.warning(f"WhyLabs guardrail returned unknown action: {action} {action_message}")
         verbose_proxy_logger.debug("****************************  end async_post_call_hook *******************************")
