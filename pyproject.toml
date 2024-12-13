@@ -73,6 +73,10 @@ extra_proxy = [
     "resend",
 ]
 
+whylabs = [
+    "backoff"
+]
+
 [tool.isort]
 profile = "black"
 
