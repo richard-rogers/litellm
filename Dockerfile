@@ -70,7 +70,7 @@ RUN chmod +x docker/entrypoint.sh
 
 
 RUN pip install icecream
-
+RUN cp /app/litellm/integrations/whylabs.py /app/custom_guardrail.py
 
 EXPOSE 4000/tcp
 
